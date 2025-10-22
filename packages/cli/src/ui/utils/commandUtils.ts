@@ -104,7 +104,7 @@ export const copyToClipboard = async (text: string): Promise<void> => {
     case 'darwin':
       return run('pbcopy', []);
     case 'linux': {
-      const sessionType = process.env.XDG_SESSION_TYPE;
+      const sessionType = process.env['XDG_SESSION_TYPE'];
       if (sessionType === 'wayland') {
         try {
           await run('wl-copy', [], linuxOptions);
