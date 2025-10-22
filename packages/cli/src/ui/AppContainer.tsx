@@ -41,6 +41,7 @@ import {
   getAllGeminiMdFilenames,
   AuthType,
   clearCachedCredentialFile,
+  type ResumedSessionData,
   ShellExecutionService,
 } from '@google/gemini-cli-core';
 import { validateAuthMethod } from '../config/auth.js';
@@ -90,6 +91,7 @@ import { useSessionStats } from './contexts/SessionContext.js';
 import { useGitBranchName } from './hooks/useGitBranchName.js';
 import { useExtensionUpdates } from './hooks/useExtensionUpdates.js';
 import { ShellFocusContext } from './contexts/ShellFocusContext.js';
+import { useSessionResume } from './hooks/useSessionResume.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 const QUEUE_ERROR_DISPLAY_DURATION_MS = 3000;
@@ -111,6 +113,7 @@ interface AppContainerProps {
   startupWarnings?: string[];
   version: string;
   initializationResult: InitializationResult;
+  resumedSessionData?: ResumedSessionData;
 }
 
 /**
@@ -126,7 +129,7 @@ const SHELL_WIDTH_FRACTION = 0.89;
 const SHELL_HEIGHT_PADDING = 10;
 
 export const AppContainer = (props: AppContainerProps) => {
-  const { settings, config, initializationResult } = props;
+  const { settings, config, initializationResult, resumedSessionData } = props;
   const historyManager = useHistory();
   useMemoryMonitor(historyManager);
   const [corgiMode, setCorgiMode] = useState(false);
@@ -361,6 +364,19 @@ export const AppContainer = (props: AppContainerProps) => {
   // Derive auth state variables for backward compatibility with UIStateContext
   const isAuthDialogOpen = authState === AuthState.Updating;
   const isAuthenticating = authState === AuthState.Unauthenticated;
+
+  // Session browser and resume functionality
+  const isGeminiClientInitialized = config.getGeminiClient()?.isInitialized();
+
+  useSessionResume({
+    config,
+    historyManager,
+    refreshStatic,
+    isGeminiClientInitialized,
+    setQuittingMessages,
+    resumedSessionData,
+    isAuthenticating,
+  });
 
   // Create handleAuthSelect wrapper for backward compatibility
   const handleAuthSelect = useCallback(
