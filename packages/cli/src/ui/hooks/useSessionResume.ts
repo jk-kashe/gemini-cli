@@ -76,6 +76,7 @@ export function useSessionResume({
     if (
       resumedSessionData &&
       !isAuthenticating &&
+      isGeminiClientInitialized && // <-- Added this check
       !hasLoadedResumedSession.current
     ) {
       hasLoadedResumedSession.current = true;
@@ -88,7 +89,12 @@ export function useSessionResume({
         resumedSessionData,
       );
     }
-  }, [resumedSessionData, isAuthenticating, loadHistoryForResume]);
+  }, [
+    resumedSessionData,
+    isAuthenticating,
+    isGeminiClientInitialized,
+    loadHistoryForResume,
+  ]); // <-- Updated dependency array
 
   return { loadHistoryForResume };
 }
