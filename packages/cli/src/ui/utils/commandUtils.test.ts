@@ -18,9 +18,12 @@ import {
 // Mock child_process
 vi.mock('child_process');
 
-// Mock process.platform for platform-specific tests
+// Mock process.platform and process.env for platform-specific tests
 const mockProcess = vi.hoisted(() => ({
   platform: 'darwin',
+  env: {
+    XDG_SESSION_TYPE: undefined as string | undefined,
+  },
 }));
 
 vi.stubGlobal(
@@ -28,10 +31,19 @@ vi.stubGlobal(
   Object.create(process, {
     platform: {
       get: () => mockProcess.platform,
-      configurable: true, // Allows the property to be changed later if needed
+      configurable: true,
+    },
+    env: {
+      get: () => mockProcess.env,
+      configurable: true,
     },
   }),
 );
+
+function setLinuxClipboardEnv(sessionType: 'wayland' | undefined) {
+  mockProcess.platform = 'linux';
+  mockProcess.env.XDG_SESSION_TYPE = sessionType;
+}
 
 interface MockChildProcess extends EventEmitter {
   stdin: EventEmitter & {
@@ -203,9 +215,9 @@ describe('commandUtils', () => {
       });
     });
 
-    describe('on Linux', () => {
+    describe('on X11 (linux)', () => {
       beforeEach(() => {
-        mockProcess.platform = 'linux';
+        setLinuxClipboardEnv(undefined);
       });
 
       it('should successfully copy text to clipboard using xclip', async () => {
@@ -448,6 +460,172 @@ describe('commandUtils', () => {
           2,
           'xsel',
           ['--clipboard', '--input'],
+          linuxOptions,
+        );
+      });
+    });
+
+    describe('on Wayland (linux)', () => {
+      beforeEach(() => {
+        setLinuxClipboardEnv('wayland');
+      });
+
+      it('should successfully copy text to clipboard using wl-copy', async () => {
+        const testText = 'Hello, Wayland!';
+        const linuxOptions: SpawnOptions = {
+          stdio: ['pipe', 'inherit', 'pipe'],
+        };
+
+        setTimeout(() => {
+          mockChild.emit('close', 0);
+        }, 0);
+
+        await copyToClipboard(testText);
+
+        expect(mockSpawn).toHaveBeenCalledWith('wl-copy', [], linuxOptions);
+        expect(mockChild.stdin.write).toHaveBeenCalledWith(testText);
+        expect(mockChild.stdin.end).toHaveBeenCalled();
+      });
+
+      it('should successfully copy on Linux when receiving an "exit" event', async () => {
+        const testText = 'Hello, Wayland!';
+        const linuxOptions: SpawnOptions = {
+          stdio: ['pipe', 'inherit', 'pipe'],
+        };
+
+        // Simulate successful execution via 'exit' event
+        setTimeout(() => {
+          mockChild.emit('exit', 0);
+        }, 0);
+
+        await copyToClipboard(testText);
+
+        expect(mockSpawn).toHaveBeenCalledWith('wl-copy', [], linuxOptions);
+        expect(mockChild.stdin.write).toHaveBeenCalledWith(testText);
+        expect(mockChild.stdin.end).toHaveBeenCalled();
+      });
+
+      it('should handle command failure on Linux via "exit" event', async () => {
+        const testText = 'Hello, Wayland!';
+        let callCount = 0;
+
+        mockSpawn.mockImplementation(() => {
+          const child = Object.assign(new EventEmitter(), {
+            stdin: Object.assign(new EventEmitter(), {
+              write: vi.fn(),
+              end: vi.fn(),
+              destroy: vi.fn(),
+            }),
+            stdout: Object.assign(new EventEmitter(), {
+              destroy: vi.fn(),
+            }),
+            stderr: Object.assign(new EventEmitter(), {
+              destroy: vi.fn(),
+            }),
+          });
+
+          setTimeout(() => {
+            if (callCount === 0) {
+              // First call (wl-copy) fails with 'exit'
+              child.stderr.emit('data', 'wl-copy failed');
+              child.emit('exit', 127);
+            } else {
+              // Second call (xclip) fails with 'exit'
+              child.stderr.emit('data', 'xclip failed');
+              child.emit('exit', 127);
+            }
+            callCount++;
+          }, 0);
+
+          return child as unknown as ReturnType<typeof spawn>;
+        });
+
+        await expect(copyToClipboard(testText)).rejects.toThrow(
+          'wl-copy command failed. "\'wl-copy\' exited with code 127: wl-copy failed".',
+        );
+
+        expect(mockSpawn).toHaveBeenCalledTimes(1);
+      });
+
+      it('should throw an error when wl-copy is not found', async () => {
+        const testText = 'Hello, world!';
+        let callCount = 0;
+        const linuxOptions: SpawnOptions = {
+          stdio: ['pipe', 'inherit', 'pipe'],
+        };
+
+        mockSpawn.mockImplementation(() => {
+          const child = Object.assign(new EventEmitter(), {
+            stdin: Object.assign(new EventEmitter(), {
+              write: vi.fn(),
+              end: vi.fn(),
+            }),
+            stderr: new EventEmitter(),
+          }) as MockChildProcess;
+
+          setTimeout(() => {
+            if (callCount === 0) {
+              // First call (wl-copy) fails with ENOENT
+              const error = new Error('spawn wl-copy ENOENT');
+              (error as NodeJS.ErrnoException).code = 'ENOENT';
+              child.emit('error', error);
+              child.emit('close', 1);
+              callCount++;
+            }
+          }, 0);
+
+          return child as unknown as ReturnType<typeof spawn>;
+        });
+
+        await expect(copyToClipboard(testText)).rejects.toThrow(
+          'Please ensure wl-clipboard is installed and configured.',
+        );
+
+        expect(mockSpawn).toHaveBeenCalledTimes(1);
+        expect(mockSpawn).toHaveBeenCalledWith('wl-copy', [], linuxOptions);
+      });
+
+      it('should emit error when wl-copy fails with stderr output (command installed)', async () => {
+        const testText = 'Hello, world!';
+        let callCount = 0;
+        const linuxOptions: SpawnOptions = {
+          stdio: ['pipe', 'inherit', 'pipe'],
+        };
+        const errorMsg = "Error: Can't open display:";
+        const exitCode = 1;
+
+        mockSpawn.mockImplementation(() => {
+          const child = Object.assign(new EventEmitter(), {
+            stdin: Object.assign(new EventEmitter(), {
+              write: vi.fn(),
+              end: vi.fn(),
+            }),
+            stderr: new EventEmitter(),
+          }) as MockChildProcess;
+
+          setTimeout(() => {
+            // e.g., cannot connect to X server
+            if (callCount === 0) {
+              child.stderr.emit('data', errorMsg);
+              child.emit('close', exitCode);
+              callCount++;
+            }
+          }, 0);
+
+          return child as unknown as ReturnType<typeof spawn>;
+        });
+
+        const wlCopyErrorMsg = `'wl-copy' exited with code ${exitCode}${errorMsg ? `: ${errorMsg}` : ''}`;
+
+        await expect(copyToClipboard(testText)).rejects.toThrow(
+          `wl-copy command failed. "${wlCopyErrorMsg}".`,
+        );
+
+        expect(mockSpawn).toHaveBeenCalledTimes(1);
+        expect(mockSpawn).toHaveBeenNthCalledWith(
+          1,
+          'wl-copy',
+          [],
           linuxOptions,
         );
       });
