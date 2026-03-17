@@ -76,6 +76,7 @@ import { runExitCleanup } from '../utils/cleanup.js';
 export interface CliArgs {
   query: string | undefined;
   model: string | undefined;
+  agent?: string;
   sandbox: boolean | string | undefined;
   debug: boolean | undefined;
   prompt: string | undefined;
@@ -272,6 +273,11 @@ export async function parseArguments(
           type: 'string',
           nargs: 1,
           description: `Model`,
+        })
+        .option('agent', {
+          alias: 'a',
+          type: 'string',
+          description: 'Adopt a specific agent persona for the session',
         })
         .option('prompt', {
           alias: 'p',
@@ -953,6 +959,7 @@ export async function loadCliConfig(
     cwd,
     fileDiscoveryService: fileService,
     bugCommand: settings.advanced?.bugCommand,
+    initialAgentName: argv.agent,
     model: resolvedModel,
     maxSessionTurns: settings.model?.maxSessionTurns,
 

@@ -591,6 +591,7 @@ export interface ConfigParameters {
   acpMode?: boolean;
   listSessions?: boolean;
   deleteSession?: string;
+  initialAgentName?: string;
   listExtensions?: boolean;
   extensionLoader?: ExtensionLoader;
   enabledExtensions?: string[];
@@ -683,6 +684,7 @@ export class Config implements McpContext, AgentLoopContext {
   private _toolRegistry!: ToolRegistry;
   private mcpClientManager?: McpClientManager;
   private readonly a2aClientManager?: A2AClientManager;
+  private activePersona: AgentDefinition | null = null;
   private allowedMcpServers: string[];
   private blockedMcpServers: string[];
   private allowedEnvironmentVariables: string[];
@@ -850,6 +852,7 @@ export class Config implements McpContext, AgentLoopContext {
   private readonly rawOutput: boolean;
   private readonly acceptRawOutputRisk: boolean;
   private readonly dynamicModelConfiguration: boolean;
+  private readonly initialAgentName: string | undefined;
   private pendingIncludeDirectories: string[];
   private readonly enableHooks: boolean;
   private readonly enableHooksUI: boolean;
@@ -1039,6 +1042,7 @@ export class Config implements McpContext, AgentLoopContext {
     this.adminSkillsEnabled = params.adminSkillsEnabled ?? true;
     this.modelAvailabilityService = new ModelAvailabilityService();
     this.dynamicModelConfiguration = params.dynamicModelConfiguration ?? false;
+    this.initialAgentName = params.initialAgentName;
 
     // HACK: The settings loading logic doesn't currently merge the default
     // generation config with the user's settings. This means if a user provides
@@ -1329,6 +1333,15 @@ export class Config implements McpContext, AgentLoopContext {
 
     this.agentRegistry = new AgentRegistry(this);
     await this.agentRegistry.initialize();
+
+    if (this.initialAgentName) {
+      const definition = this.agentRegistry.getDiscoveredDefinition(
+        this.initialAgentName,
+      );
+      if (definition) {
+        this.activePersona = definition;
+      }
+    }
 
     coreEvents.on(CoreEvent.AgentsRefreshed, this.onAgentsRefreshed);
 
@@ -2508,6 +2521,26 @@ export class Config implements McpContext, AgentLoopContext {
   /** @deprecated Use geminiClient getter */
   getGeminiClient(): GeminiClient {
     return this.geminiClient;
+  }
+
+  /**
+   * Sets the active persona for the main agent.
+   */
+  setActivePersona(agent: AgentDefinition | null): void {
+    this.activePersona = agent;
+    if (this._geminiClient?.isInitialized()) {
+      this._geminiClient.setTools(undefined, true).catch((err) => {
+        debugLogger.error('Failed to update tools after persona change', err);
+      });
+    }
+    this.updateSystemInstructionIfInitialized();
+  }
+
+  /**
+   * Returns the currently active persona, or null if using the default main agent.
+   */
+  getActivePersona(): AgentDefinition | null {
+    return this.activePersona;
   }
 
   /**

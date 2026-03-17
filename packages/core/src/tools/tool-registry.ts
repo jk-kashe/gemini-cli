@@ -524,6 +524,22 @@ export class ToolRegistry {
    * @returns All the tools that are not excluded.
    */
   private getActiveTools(): AnyDeclarativeTool[] {
+    const activePersona = this.config.getActivePersona?.();
+    let allowedByPersona: Set<string> | undefined;
+    if (
+      activePersona &&
+      activePersona.kind === 'local' &&
+      activePersona.toolConfig
+    ) {
+      if (!activePersona.toolConfig.tools.includes('*')) {
+        allowedByPersona = new Set(
+          activePersona.toolConfig.tools.filter(
+            (t): t is string => typeof t === 'string',
+          ),
+        );
+      }
+    }
+
     const toolMetadata = this.buildToolMetadata();
     const allKnownNames = new Set(this.allKnownTools.keys());
     const excludedTools =
@@ -533,7 +549,13 @@ export class ToolRegistry {
     const activeTools: AnyDeclarativeTool[] = [];
     for (const tool of this.allKnownTools.values()) {
       if (this.isActiveTool(tool, excludedTools)) {
-        activeTools.push(tool);
+        if (allowedByPersona) {
+          if (allowedByPersona.has(tool.name)) {
+            activeTools.push(tool);
+          }
+        } else {
+          activeTools.push(tool);
+        }
       }
     }
     return activeTools;

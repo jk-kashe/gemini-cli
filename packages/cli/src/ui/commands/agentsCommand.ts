@@ -267,6 +267,68 @@ async function configAction(
   };
 }
 
+async function adoptAction(
+  context: CommandContext,
+  args: string,
+): Promise<SlashCommandActionReturn | void> {
+  const { config } = context.services;
+  if (!config) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: 'Config not loaded.',
+    };
+  }
+
+  const agentName = args.trim();
+  if (!agentName) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: 'Usage: /agents adopt <agent-name>',
+    };
+  }
+
+  const agentRegistry = config.getAgentRegistry();
+  const definition = agentRegistry?.getDiscoveredDefinition(agentName);
+  if (!definition) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: `Agent '${agentName}' not found.`,
+    };
+  }
+
+  config.setActivePersona(definition);
+
+  return {
+    type: 'message',
+    messageType: 'info',
+    content: `Main agent has adopted the persona: **${definition.displayName || agentName}**`,
+  };
+}
+
+async function resetAction(
+  context: CommandContext,
+): Promise<SlashCommandActionReturn | void> {
+  const { config } = context.services;
+  if (!config) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: 'Config not loaded.',
+    };
+  }
+
+  config.setActivePersona(null);
+
+  return {
+    type: 'message',
+    messageType: 'info',
+    content: 'Main agent persona has been reset to default.',
+  };
+}
+
 function completeAgentsToEnable(context: CommandContext, partialArg: string) {
   const config = context.services.agentContext?.config;
   const { settings } = context.services;
@@ -325,6 +387,23 @@ const configCommand: SlashCommand = {
   completion: completeAllAgents,
 };
 
+const adoptCommand: SlashCommand = {
+  name: 'adopt',
+  description: 'Adopts the persona of a specific agent for the main session',
+  kind: CommandKind.BUILT_IN,
+  autoExecute: false,
+  action: adoptAction,
+  completion: completeAllAgents,
+};
+
+const resetCommand: SlashCommand = {
+  name: 'reset',
+  description: 'Resets the main agent persona to default',
+  kind: CommandKind.BUILT_IN,
+  autoExecute: true,
+  action: resetAction,
+};
+
 const agentsReloadCommand: SlashCommand = {
   name: 'reload',
   altNames: ['refresh'],
@@ -366,6 +445,8 @@ export const agentsCommand: SlashCommand = {
     enableCommand,
     disableCommand,
     configCommand,
+    adoptCommand,
+    resetCommand,
   ],
   action: async (context: CommandContext, args) =>
     // Default to list if no subcommand is provided

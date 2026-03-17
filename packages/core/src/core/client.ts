@@ -285,12 +285,12 @@ export class GeminiClient {
 
   private lastUsedModelId?: string;
 
-  async setTools(modelId?: string): Promise<void> {
+  async setTools(modelId?: string, force: boolean = false): Promise<void> {
     if (!this.chat) {
       return;
     }
 
-    if (modelId && modelId === this.lastUsedModelId) {
+    if (!force && modelId && modelId === this.lastUsedModelId) {
       return;
     }
     this.lastUsedModelId = modelId;
