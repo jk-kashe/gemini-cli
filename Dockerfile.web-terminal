@@ -22,11 +22,14 @@ COPY packages/test-utils/package.json ./packages/test-utils/
 COPY packages/a2a-server/package.json ./packages/a2a-server/
 COPY packages/vscode-ide-companion/package.json ./packages/vscode-ide-companion/
 
-# Install dependencies
-RUN npm install --no-package-lock --registry=https://registry.npmjs.org/
+# Install dependencies without running lifecycle scripts
+RUN npm install --no-package-lock --registry=https://registry.npmjs.org/ --ignore-scripts
 
 # Copy source code
 COPY . .
+
+# Rebuild native dependencies (since we used --ignore-scripts earlier)
+RUN npm rebuild
 
 # Build everything
 RUN npm run build:all
