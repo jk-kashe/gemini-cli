@@ -41,6 +41,7 @@ import { createHash } from 'node:crypto';
 import v8 from 'node:v8';
 import os from 'node:os';
 import dns from 'node:dns';
+import prompts from 'prompts';
 import { start_sandbox } from './utils/sandbox.js';
 import {
   loadSettings,
@@ -589,23 +590,101 @@ export async function main() {
         // Use the existing session ID to continue recording to the same session
         config.setSessionId(resumedSessionData.conversation.sessionId);
       } catch (error) {
+        let resolvedGlobally = false;
+
+        // If not found locally, try global search
         if (
           error instanceof SessionError &&
-          error.code === 'NO_SESSIONS_FOUND'
+          error.code === 'INVALID_SESSION_IDENTIFIER'
         ) {
-          // No sessions to resume — start a fresh session with a warning
-          startupWarnings.push({
-            id: 'resume-no-sessions',
-            message: error.message,
-            priority: WarningPriority.High,
-          });
-        } else {
-          coreEvents.emitFeedback(
-            'error',
-            `Error resuming session: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          const globalMatches = await sessionSelector.findGlobalSessions(
+            argv.resume,
           );
-          await runExitCleanup();
-          process.exit(ExitCodes.FATAL_INPUT_ERROR);
+
+          if (globalMatches.length > 0) {
+            let selectedMatch: (typeof globalMatches)[0] | undefined;
+
+            if (globalMatches.length === 1) {
+              const match = globalMatches[0];
+
+              const response = await prompts({
+                type: 'confirm',
+                name: 'pull',
+                message: `Session "${argv.resume}" found in another workspace (${match.projectPath}). Pull and resume it here?`,
+                initial: true,
+              });
+
+              if (response.pull) {
+                selectedMatch = match;
+              }
+            } else {
+              const response = await prompts({
+                type: 'select',
+                name: 'match',
+                message: `Multiple "${argv.resume}" sessions found in other workspaces. Pick one to pull and resume:`,
+                choices: [
+                  ...globalMatches.map((m) => ({
+                    title: `[${m.projectPath}] ${m.session.displayName}`,
+                    value: m,
+                  })),
+                  { title: 'Cancel', value: null },
+                ],
+              });
+
+              if (response.match) {
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+                selectedMatch = response.match;
+              }
+            }
+
+            if (selectedMatch) {
+              try {
+                const importedSession =
+                  await sessionSelector.importSession(selectedMatch);
+                const result = await sessionSelector.resolveSession(
+                  importedSession.id,
+                );
+                resumedSessionData = {
+                  conversation: result.sessionData,
+                  filePath: result.sessionPath,
+                    };
+                config.setSessionId(
+                  resumedSessionData.conversation.sessionId,
+                );
+                resolvedGlobally = true;
+                coreEvents.emitFeedback(
+                  'info',
+                  `Successfully teleported session "${argv.resume}" from ${selectedMatch.projectPath}`,
+                );
+              } catch (importError) {
+                coreEvents.emitFeedback(
+                  'error',
+                  `Failed to teleport session: ${importError instanceof Error ? importError.message : String(importError)}`,
+                );
+              }
+            }
+          }
+        }
+
+        if (!resolvedGlobally) {
+          if (
+            error instanceof SessionError &&
+            error.code === 'NO_SESSIONS_FOUND'
+          ) {
+            // No sessions to resume — start a fresh session with a warning
+            startupWarnings.push({
+              id: 'resume-no-sessions',
+              message: error.message,
+              priority: WarningPriority.High,
+            });
+          } else {
+            coreEvents.emitFeedback(
+              'error',
+              `Error resuming session: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            );
+            await runExitCleanup();
+            process.exit(ExitCodes.FATAL_INPUT_ERROR);
+          }
         }
       }
     }

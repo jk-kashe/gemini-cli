@@ -52,6 +52,16 @@ export class ProjectRegistry {
     return this.initPromise;
   }
 
+  /**
+   * Returns all registered projects as a record of path -> shortId.
+   */
+  getAllProjects(): Record<string, string> {
+    if (!this.data) {
+      throw new Error('ProjectRegistry must be initialized before use');
+    }
+    return { ...this.data.projects };
+  }
+
   private async loadData(): Promise<RegistryData> {
     if (!fs.existsSync(this.registryPath)) {
       return { projects: {} };

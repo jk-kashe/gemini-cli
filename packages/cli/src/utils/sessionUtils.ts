@@ -12,6 +12,7 @@ import {
   type Config,
   type ConversationRecord,
   type MessageRecord,
+  Storage,
 } from '@google/gemini-cli-core';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
@@ -138,6 +139,15 @@ export interface SessionSelectionResult {
   sessionPath: string;
   sessionData: ConversationRecord;
   displayInfo: string;
+}
+
+/**
+ * Represents a session match found in another workspace.
+ */
+export interface GlobalSessionMatch {
+  session: SessionInfo;
+  projectPath: string;
+  projectIdentifier: string;
 }
 
 /**
@@ -413,6 +423,112 @@ export class SessionSelector {
       'chats',
     );
     return getSessionFiles(chatsDir, this.config.getSessionId());
+  }
+
+  /**
+   * Searches for a session across all known projects by UUID or alias.
+   *
+   * @param identifier - The UUID or alias to search for
+   * @returns Promise resolving to an array of global session matches
+   */
+  async findGlobalSessions(identifier: string): Promise<GlobalSessionMatch[]> {
+    const trimmedIdentifier = identifier.trim();
+    if (trimmedIdentifier.length === 0) {
+      return [];
+    }
+
+    const projects = this.config.storage.listAllProjects();
+    const currentProjectIdentifier = this.config.storage.getProjectIdentifier();
+    const globalTempDir = Storage.getGlobalTempDir();
+
+    const matches: GlobalSessionMatch[] = [];
+
+    for (const project of projects) {
+      // Skip current project
+      if (project.identifier === currentProjectIdentifier) {
+        continue;
+      }
+
+      const projectChatsDir = path.join(
+        globalTempDir,
+        project.identifier,
+        'chats',
+      );
+
+      try {
+        // We use a simplified version here since we only care about ID/alias matching
+        const sessions = await getSessionFiles(projectChatsDir);
+
+        // Match by UUID or alias
+        const matchedSessions = sessions.filter(
+          (s) => s.id === trimmedIdentifier || s.alias === trimmedIdentifier,
+        );
+
+        for (const s of matchedSessions) {
+          matches.push({
+            session: s,
+            projectPath: project.path,
+            projectIdentifier: project.identifier,
+          });
+        }
+      } catch {
+        // Skip projects that fail to load (e.g. no chats dir)
+        continue;
+      }
+    }
+
+    return matches;
+  }
+
+  /**
+   * Imports a session from another workspace into the current workspace.
+   *
+   * @param match - The global session match to import
+   * @returns Promise resolving to the imported SessionInfo in the current workspace
+   */
+  async importSession(match: GlobalSessionMatch): Promise<SessionInfo> {
+    const globalTempDir = Storage.getGlobalTempDir();
+    const sourceProjectTempDir = path.join(
+      globalTempDir,
+      match.projectIdentifier,
+    );
+    const sourceChatsDir = path.join(sourceProjectTempDir, 'chats');
+    const sourcePath = path.join(sourceChatsDir, match.session.fileName);
+
+    const targetProjectTempDir = this.config.storage.getProjectTempDir();
+    const targetChatsDir = path.join(targetProjectTempDir, 'chats');
+    const targetPath = path.join(targetChatsDir, match.session.fileName);
+
+    // Ensure target directory exists
+    await fs.mkdir(targetChatsDir, { recursive: true });
+
+    // Copy the session file
+    await fs.copyFile(sourcePath, targetPath);
+
+    // Copy log files if they exist
+    const sourceLogsDir = path.join(sourceProjectTempDir, 'logs');
+    const targetLogsDir = path.join(targetProjectTempDir, 'logs');
+    const logFileName = `session-${match.session.id}.jsonl`;
+    const sourceLogPath = path.join(sourceLogsDir, logFileName);
+    const targetLogPath = path.join(targetLogsDir, logFileName);
+
+    try {
+      await fs.stat(sourceLogPath);
+      await fs.mkdir(targetLogsDir, { recursive: true });
+      await fs.copyFile(sourceLogPath, targetLogPath);
+    } catch {
+      // Logs are optional, ignore if they don't exist
+    }
+
+    // Re-list sessions to get the new index for the imported session
+    const sessions = await this.listSessions();
+    const importedSession = sessions.find((s) => s.id === match.session.id);
+
+    if (!importedSession) {
+      throw new Error(`Failed to import session ${match.session.id}`);
+    }
+
+    return importedSession;
   }
 
   /**

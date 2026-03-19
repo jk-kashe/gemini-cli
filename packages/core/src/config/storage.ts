@@ -30,6 +30,7 @@ export class Storage {
   private readonly targetDir: string;
   private readonly sessionId: string | undefined;
   private projectIdentifier: string | undefined;
+  private registry: ProjectRegistry | undefined;
   private initPromise: Promise<void> | undefined;
   private customPlansDir: string | undefined;
 
@@ -40,6 +41,20 @@ export class Storage {
 
   setCustomPlansDir(dir: string | undefined): void {
     this.customPlansDir = dir;
+  }
+
+  /**
+   * Returns all known projects and their identifiers.
+   */
+  listAllProjects(): Array<{ path: string; identifier: string }> {
+    if (!this.registry) {
+      throw new Error('Storage must be initialized before use');
+    }
+    const projects = this.registry.getAllProjects();
+    return Object.entries(projects).map(([path, identifier]) => ({
+      path,
+      identifier,
+    }));
   }
 
   static getGlobalGeminiDir(): string {
@@ -203,7 +218,7 @@ export class Storage {
     return crypto.createHash('sha256').update(filePath).digest('hex');
   }
 
-  private getProjectIdentifier(): string {
+  getProjectIdentifier(): string {
     if (!this.projectIdentifier) {
       throw new Error('Storage must be initialized before use');
     }
@@ -232,6 +247,7 @@ export class Storage {
         path.join(Storage.getGlobalGeminiDir(), 'history'),
       ]);
       await registry.initialize();
+      this.registry = registry;
 
       this.projectIdentifier = await registry.getShortId(this.getProjectRoot());
       await this.performMigration();

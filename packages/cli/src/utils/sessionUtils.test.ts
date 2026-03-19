@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   SessionSelector,
   extractFirstUserMessage,
@@ -19,33 +19,50 @@ import {
 } from '@google/gemini-cli-core';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
+import * as os from 'node:os';
 import { randomUUID } from 'node:crypto';
 
 describe('SessionSelector', () => {
+  let baseTmpDir: string;
   let tmpDir: string;
   let config: Config;
 
   beforeEach(async () => {
     // Create a temporary directory for testing
-    tmpDir = path.join(process.cwd(), '.tmp-test-sessions');
+    baseTmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gemini-test-'));
+    tmpDir = path.join(baseTmpDir, 'current-project');
     await fs.mkdir(tmpDir, { recursive: true });
 
     // Mock config
     config = {
       storage: {
         getProjectTempDir: () => tmpDir,
-      },
+        getProjectIdentifier: () => 'current-project',
+        listAllProjects: () => [
+          { path: '/path/to/current', identifier: 'current-project' },
+          { path: '/path/to/other', identifier: 'other-project' },
+        ],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as unknown as any,
       getSessionId: () => 'current-session-id',
-    } as Partial<Config> as Config;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as unknown as any;
+
+    // Mock static getGlobalTempDir
+    vi.spyOn(
+      (await import('@google/gemini-cli-core')).Storage,
+      'getGlobalTempDir',
+    ).mockReturnValue(baseTmpDir);
   });
 
   afterEach(async () => {
     // Clean up test files
     try {
-      await fs.rm(tmpDir, { recursive: true, force: true });
+      await fs.rm(baseTmpDir, { recursive: true, force: true });
     } catch (_error) {
       // Ignore cleanup errors
     }
+    vi.restoreAllMocks();
   });
 
   it('should resolve session by UUID', async () => {
@@ -616,6 +633,120 @@ describe('SessionSelector', () => {
     // Should only list the main session
     expect(sessions.length).toBe(1);
     expect(sessions[0].id).toBe(mainSessionId);
+  });
+
+  it('should find global sessions', async () => {
+    const sessionId = randomUUID();
+    const alias = 'global-alias';
+
+    // Setup other project's session
+    const otherProjectDir = path.join(path.dirname(tmpDir), 'other-project');
+    const otherChatsDir = path.join(otherProjectDir, 'chats');
+    await fs.mkdir(otherChatsDir, { recursive: true });
+
+    const session = {
+      sessionId,
+      projectHash: 'other-hash',
+      alias,
+      startTime: '2024-01-01T10:00:00.000Z',
+      lastUpdated: '2024-01-01T10:30:00.000Z',
+      messages: [
+        {
+          type: 'user',
+          content: 'Global message',
+          id: 'msg1',
+          timestamp: '2024-01-01T10:00:00.000Z',
+        },
+      ],
+    };
+
+    await fs.writeFile(
+      path.join(
+        otherChatsDir,
+        `${SESSION_FILE_PREFIX}2024-01-01T10-00-${sessionId.slice(0, 8)}.json`,
+      ),
+      JSON.stringify(session, null, 2),
+    );
+
+    const sessionSelector = new SessionSelector(config);
+
+    // Search by alias
+    const matchesByAlias = await sessionSelector.findGlobalSessions(alias);
+    expect(matchesByAlias.length).toBe(1);
+    expect(matchesByAlias[0].session.id).toBe(sessionId);
+    expect(matchesByAlias[0].projectIdentifier).toBe('other-project');
+
+    // Search by UUID
+    const matchesByUuid = await sessionSelector.findGlobalSessions(sessionId);
+    expect(matchesByUuid.length).toBe(1);
+    expect(matchesByUuid[0].session.id).toBe(sessionId);
+  });
+
+  it('should import session from another workspace', async () => {
+    const sessionId = randomUUID();
+    const fileName = `${SESSION_FILE_PREFIX}2024-01-01T10-00-${sessionId.slice(0, 8)}.json`;
+
+    // Setup other project's session
+    const otherProjectDir = path.join(path.dirname(tmpDir), 'other-project');
+    const otherChatsDir = path.join(otherProjectDir, 'chats');
+    await fs.mkdir(otherChatsDir, { recursive: true });
+
+    const session = {
+      sessionId,
+      projectHash: 'other-hash',
+      startTime: '2024-01-01T10:00:00.000Z',
+      lastUpdated: '2024-01-01T10:30:00.000Z',
+      messages: [
+        {
+          type: 'user',
+          content: 'Global message',
+          id: 'msg1',
+          timestamp: '2024-01-01T10:00:00.000Z',
+        },
+      ],
+    };
+
+    await fs.writeFile(
+      path.join(otherChatsDir, fileName),
+      JSON.stringify(session, null, 2),
+    );
+
+    // Setup other project's logs
+    const otherLogsDir = path.join(otherProjectDir, 'logs');
+    await fs.mkdir(otherLogsDir, { recursive: true });
+    await fs.writeFile(
+      path.join(otherLogsDir, `session-${sessionId}.jsonl`),
+      '{"log":"entry"}\n',
+    );
+
+    const sessionSelector = new SessionSelector(config);
+    const match = {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      session: { id: sessionId, fileName } as unknown as any,
+      projectPath: '/path/to/other',
+      projectIdentifier: 'other-project',
+    };
+
+    const imported = await sessionSelector.importSession(match);
+
+    // Verify session file copied
+    const targetPath = path.join(tmpDir, 'chats', fileName);
+    const targetContent = JSON.parse(await fs.readFile(targetPath, 'utf8'));
+    expect(targetContent.sessionId).toBe(sessionId);
+
+    // Verify log file copied
+    const targetLogPath = path.join(
+      tmpDir,
+      'logs',
+      `session-${sessionId}.jsonl`,
+    );
+    const logExists = await fs
+      .stat(targetLogPath)
+      .then(() => true)
+      .catch(() => false);
+    expect(logExists).toBe(true);
+
+    expect(imported.id).toBe(sessionId);
   });
 });
 

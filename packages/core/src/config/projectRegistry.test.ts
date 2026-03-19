@@ -300,4 +300,17 @@ describe('ProjectRegistry', () => {
       'ProjectRegistry must be initialized before use',
     );
   });
+
+  it('returns all projects', async () => {
+    const registry = new ProjectRegistry(registryPath);
+    await registry.initialize();
+    const projectPath1 = normalizePath(path.join(tempDir, 'project-1'));
+    const projectPath2 = normalizePath(path.join(tempDir, 'project-2'));
+    await registry.getShortId(projectPath1);
+    await registry.getShortId(projectPath2);
+
+    const projects = registry.getAllProjects();
+    expect(projects[projectPath1]).toBe('project-1');
+    expect(projects[projectPath2]).toBe('project-2');
+  });
 });
