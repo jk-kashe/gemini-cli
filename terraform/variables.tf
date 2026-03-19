@@ -31,6 +31,6 @@ variable "service_name" {
 
 variable "use_iap" {
   description = "Whether to enable Identity-Aware Proxy (IAP) for the Cloud Run service"
-  type        = boolean
+  type        = bool
   default     = true
 }
