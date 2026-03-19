@@ -37,6 +37,9 @@ RUN npm rebuild @lydell/node-pty
 # Remove a2a-server from the bundle targets safely
 RUN node -e "const fs = require('fs'); let cfg = fs.readFileSync('esbuild.config.js', 'utf8'); cfg = cfg.replace('esbuild.build(a2aServerConfig),', ''); cfg = cfg.replace('const [cliResult, webTerminalResult, a2aResult] = results;', 'const [cliResult, webTerminalResult] = results;'); cfg = cfg.replace('if (a2aResult.status === \\'rejected\\') {', 'if (false) {'); fs.writeFileSync('esbuild.config.js', cfg);"
 
+# Generate dummy git-commit info to satisfy esbuild imports without requiring a .git directory
+RUN mkdir -p generated && echo "export const GIT_COMMIT_INFO = { hash: 'unknown', shortHash: 'unknown', authorName: 'Cloud Build', authorEmail: 'unknown', date: new Date().toISOString() }; export const CLI_VERSION = '0.36.0-web'; " > generated/git-commit.js
+
 # Bundle everything using esbuild (this generates bundle/gemini.js and bundle/web-terminal.js)
 # This is MUCH faster and uses FAR less memory than tsc.
 RUN npm run bundle
