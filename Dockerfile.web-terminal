@@ -20,7 +20,7 @@ COPY . .
 RUN npm config set @google:registry https://registry.npmjs.org/
 
 # Increase Node.js heap limit for TypeScript compilation
-ENV NODE_OPTIONS="--max-old-space-size=4096"
+ENV NODE_OPTIONS="--max-old-space-size=6144"
 
 # Install ONLY the necessary workspace and its dependencies. 
 # This avoids installing the VS Code extension or other heavy packages entirely.
@@ -29,9 +29,10 @@ RUN npm install --workspace=@google/gemini-cli-web-terminal --include-workspace-
 # Rebuild native dependencies manually since we ignored scripts
 RUN npm rebuild @lydell/node-pty
 
-# Build the required packages
-RUN npm run build --workspace=@google/gemini-cli-core
-RUN npm run build --workspace=@google/gemini-cli-web-terminal
+# Build the required packages directly using tsc to save memory
+RUN cd packages/core && npx tsc -p tsconfig.json
+RUN cd packages/cli && npx tsc -p tsconfig.json
+RUN cd packages/web-terminal && npx tsc -p tsconfig.json
 
 # Final stage
 FROM node:20-bookworm-slim
