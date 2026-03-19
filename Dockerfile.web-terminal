@@ -21,7 +21,10 @@ RUN npm config set @google:registry https://registry.npmjs.org/
 
 # Install ONLY the necessary workspace and its dependencies. 
 # This avoids installing the VS Code extension or other heavy packages entirely.
-RUN npm install --workspace=@google/gemini-cli-web-terminal --include-workspace-root --no-package-lock --registry=https://registry.npmjs.org/
+RUN npm install --workspace=@google/gemini-cli-web-terminal --include-workspace-root --no-package-lock --registry=https://registry.npmjs.org/ --ignore-scripts
+
+# Rebuild native dependencies manually since we ignored scripts
+RUN npm rebuild @lydell/node-pty
 
 # Build the required packages
 RUN npm run build --workspace=@google/gemini-cli-core
