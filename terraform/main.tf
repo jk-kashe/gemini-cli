@@ -104,6 +104,21 @@ resource "google_project_iam_member" "compute_log_writer" {
   member  = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
 }
 
+# 5c. Grant Cloud Build permissions to push images to Artifact Registry
+resource "google_artifact_registry_repository_iam_member" "cloudbuild_writer" {
+  location   = google_artifact_registry_repository.repo.location
+  repository = google_artifact_registry_repository.repo.name
+  role       = "roles/artifactregistry.writer"
+  member     = "serviceAccount:${data.google_project.project.number}@cloudbuild.gserviceaccount.com"
+}
+
+resource "google_artifact_registry_repository_iam_member" "compute_writer" {
+  location   = google_artifact_registry_repository.repo.location
+  repository = google_artifact_registry_repository.repo.name
+  role       = "roles/artifactregistry.writer"
+  member     = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+}
+
 # 6. Cloud Run Service (Experimental)
 # Note: Initial deployment might fail if the image doesn't exist yet.
 # In a real MVP, you'd build and push the image before applying this part,
