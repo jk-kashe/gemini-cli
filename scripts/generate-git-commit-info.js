@@ -42,17 +42,21 @@ if (!existsSync(generatedCoreDir)) {
 }
 
 try {
-  const gitHash = execSync('git rev-parse --short HEAD', {
+  const gitHash = execSync('git rev-parse --short HEAD 2>/dev/null', {
     encoding: 'utf-8',
   }).trim();
   if (gitHash) {
     gitCommitInfo = gitHash;
   }
+} catch {
+  // ignore git errors gracefully
+}
 
+try {
   const result = await readPackageUp();
   cliVersion = result?.packageJson?.version ?? 'UNKNOWN';
 } catch {
-  // ignore
+  // ignore package read errors gracefully
 }
 
 const fileContent = `/**
