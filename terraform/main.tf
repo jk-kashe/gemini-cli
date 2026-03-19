@@ -35,6 +35,8 @@ provider "google-beta" {
   region  = var.region
 }
 
+data "google_project" "project" {}
+
 # 1. Enable required APIs
 resource "google_project_service" "cloud_run" {
   service = "run.googleapis.com"
@@ -48,6 +50,11 @@ resource "google_project_service" "artifact_registry" {
 
 resource "google_project_service" "iap" {
   service = "iap.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "cloudbuild" {
+  service = "cloudbuild.googleapis.com"
   disable_on_destroy = false
 }
 
@@ -81,6 +88,20 @@ resource "google_storage_bucket_iam_member" "workspace_admin" {
   bucket = google_storage_bucket.workspace.name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.gemini_runner.email}"
+}
+
+# 5b. Grant Cloud Build service account access to staging bucket
+# (Using the Compute Engine default service account as seen in the error message)
+resource "google_project_iam_member" "compute_storage_viewer" {
+  project = var.project_id
+  role    = "roles/storage.objectViewer"
+  member  = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "compute_log_writer" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
 }
 
 # 6. Cloud Run Service (Experimental)
