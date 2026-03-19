@@ -21,6 +21,4 @@ LICENSE
 .npmrc
 .yamllint.yml
 Makefile
-esbuild.config.js
-package-lock.json
 cloudbuild.yaml
