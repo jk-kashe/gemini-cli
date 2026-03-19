@@ -19,8 +19,8 @@ COPY . .
 RUN rm -rf packages/vscode-ide-companion packages/devtools packages/sdk packages/a2a-server
 
 # Update root package.json so npm doesn't look for the deleted workspaces
-# and rewrite the bundle script to skip building devtools (since we deleted it).
-RUN node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json')); pkg.workspaces = ['packages/cli', 'packages/core', 'packages/test-utils', 'packages/web-terminal']; pkg.scripts.bundle = 'node scripts/generate-git-commit-info.js && node esbuild.config.js && node scripts/copy_bundle_assets.js'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));"
+# and rewrite the bundle script to skip building devtools and generate-git-commit-info
+RUN node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json')); pkg.workspaces = ['packages/cli', 'packages/core', 'packages/test-utils', 'packages/web-terminal']; pkg.scripts.bundle = 'node esbuild.config.js && node scripts/copy_bundle_assets.js'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));"
 
 # Force public registry for @google scope in case a local .npmrc was copied
 RUN npm config set @google:registry https://registry.npmjs.org/
@@ -34,8 +34,8 @@ RUN npm install --no-package-lock --registry=https://registry.npmjs.org/ --ignor
 # Rebuild native dependencies manually since we ignored scripts
 RUN npm rebuild @lydell/node-pty
 
-# Remove a2a-server from the bundle targets since we deleted its folder
-RUN node -e "const fs = require('fs'); let cfg = fs.readFileSync('esbuild.config.js', 'utf8'); cfg = cfg.replace('esbuild.build(a2aServerConfig),', '// a2a server removed'); fs.writeFileSync('esbuild.config.js', cfg);"
+# Remove a2a-server from the bundle targets safely
+RUN node -e "const fs = require('fs'); let cfg = fs.readFileSync('esbuild.config.js', 'utf8'); cfg = cfg.replace('esbuild.build(a2aServerConfig),', ''); cfg = cfg.replace('const [cliResult, webTerminalResult, a2aResult] = results;', 'const [cliResult, webTerminalResult] = results;'); cfg = cfg.replace('if (a2aResult.status === \\'rejected\\') {', 'if (false) {'); fs.writeFileSync('esbuild.config.js', cfg);"
 
 # Bundle everything using esbuild (this generates bundle/gemini.js and bundle/web-terminal.js)
 # This is MUCH faster and uses FAR less memory than tsc.
