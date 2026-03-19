@@ -19,6 +19,9 @@ COPY . .
 # Force public registry for @google scope in case a local .npmrc was copied
 RUN npm config set @google:registry https://registry.npmjs.org/
 
+# Increase Node.js heap limit for TypeScript compilation
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
 # Install ONLY the necessary workspace and its dependencies. 
 # This avoids installing the VS Code extension or other heavy packages entirely.
 RUN npm install --workspace=@google/gemini-cli-web-terminal --include-workspace-root --no-package-lock --registry=https://registry.npmjs.org/ --ignore-scripts
