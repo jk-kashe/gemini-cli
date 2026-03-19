@@ -18,10 +18,19 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 6.0"
     }
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = "~> 6.0"
+    }
   }
 }
 
 provider "google" {
+  project = var.project_id
+  region  = var.region
+}
+
+provider "google-beta" {
   project = var.project_id
   region  = var.region
 }
@@ -34,6 +43,11 @@ resource "google_project_service" "cloud_run" {
 
 resource "google_project_service" "artifact_registry" {
   service = "artifactregistry.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "iap" {
+  service = "iap.googleapis.com"
   disable_on_destroy = false
 }
 
@@ -74,9 +88,14 @@ resource "google_storage_bucket_iam_member" "workspace_admin" {
 # In a real MVP, you'd build and push the image before applying this part,
 # or use a placeholder image initially.
 resource "google_cloud_run_v2_service" "web_terminal" {
-  name     = "gemini-cli-web"
-  location = var.region
-  ingress  = "INGRESS_TRAFFIC_ALL"
+  provider            = google-beta
+  name                = var.service_name
+  location            = var.region
+  project             = var.project_id
+  deletion_protection = false
+  ingress             = "INGRESS_TRAFFIC_ALL"
+  iap_enabled         = var.use_iap
+  launch_stage        = "BETA"
 
   template {
     service_account = google_service_account.gemini_runner.email
@@ -114,12 +133,15 @@ resource "google_cloud_run_v2_service" "web_terminal" {
 
   depends_on = [
     google_project_service.cloud_run,
+    google_project_service.iap,
     google_storage_bucket_iam_member.workspace_admin
   ]
 }
 
 # 7. Make the service public (Optional/Experimental)
+# Only when IAP is not enabled.
 resource "google_cloud_run_v2_service_iam_member" "public_access" {
+  count    = var.use_iap ? 0 : 1
   location = google_cloud_run_v2_service.web_terminal.location
   name     = google_cloud_run_v2_service.web_terminal.name
   role     = "roles/run.invoker"

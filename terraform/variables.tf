@@ -22,3 +22,15 @@ variable "region" {
   type        = string
   default     = "us-central1"
 }
+
+variable "service_name" {
+  description = "The name of the Cloud Run service"
+  type        = string
+  default     = "gemini-cli-web"
+}
+
+variable "use_iap" {
+  description = "Whether to enable Identity-Aware Proxy (IAP) for the Cloud Run service"
+  type        = boolean
+  default     = true
+}
