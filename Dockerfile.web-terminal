@@ -23,7 +23,7 @@ COPY packages/a2a-server/package.json ./packages/a2a-server/
 COPY packages/vscode-ide-companion/package.json ./packages/vscode-ide-companion/
 
 # Install dependencies
-RUN npm config set @google:registry https://registry.npmjs.org/ && npm install
+RUN npm install --no-package-lock --registry=https://registry.npmjs.org/
 
 # Copy source code
 COPY . .
