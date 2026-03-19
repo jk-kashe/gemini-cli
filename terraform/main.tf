@@ -138,10 +138,18 @@ resource "google_cloud_run_v2_service" "web_terminal" {
     execution_environment = "EXECUTION_ENVIRONMENT_GEN2"
     
     session_affinity = true
+    timeout          = "600s"
 
     containers {
       image = var.container_image
       
+      resources {
+        limits = {
+          cpu    = "2"
+          memory = "4Gi"
+        }
+      }
+
       env {
         name  = "WORKSPACE_DIR"
         value = "/mnt/gcs-workspace"
