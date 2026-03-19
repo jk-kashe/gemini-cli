@@ -40,7 +40,7 @@ fi
 
 # 2. Build and push Docker image
 echo "Building and pushing Docker image ${IMAGE_TAG}..."
-gcloud builds submit --tag "${IMAGE_TAG}" --file Dockerfile.web-terminal .
+gcloud builds submit --tag "${IMAGE_TAG}" --dockerfile Dockerfile.web-terminal .
 
 # 3. Deploy to Cloud Run
 # Note: This will update the image on the service. If the service was created

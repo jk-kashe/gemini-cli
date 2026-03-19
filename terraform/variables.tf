@@ -46,3 +46,9 @@ variable "use_iap" {
   type        = bool
   default     = true
 }
+
+variable "iap_access_user" {
+  description = "The email address of the user to grant IAP access to. Format: user:email@example.com"
+  type        = string
+  default     = ""
+}

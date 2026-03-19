@@ -4,3 +4,4 @@ service_name    = "gemini-cli-web"
 repository_name = "gemini-cli-repo"
 container_image = "us-docker.pkg.dev/cloudrun/container/hello"
 use_iap         = true
+iap_access_user = "user:your-email@example.com"

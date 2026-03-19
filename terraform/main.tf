@@ -153,3 +153,12 @@ resource "google_cloud_run_v2_service_iam_member" "public_access" {
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
+
+# 8. Grant IAP access to a specific user
+resource "google_iap_web_backend_service_iam_member" "iap_access" {
+  count                = (var.use_iap && var.iap_access_user != "") ? 1 : 0
+  project              = var.project_id
+  web_backend_service  = google_cloud_run_v2_service.web_terminal.name
+  role                 = "roles/iap.httpsResourceAccessor"
+  member               = var.iap_access_user
+}
