@@ -29,6 +29,18 @@ variable "service_name" {
   default     = "gemini-cli-web"
 }
 
+variable "repository_name" {
+  description = "The name of the Artifact Registry repository"
+  type        = string
+  default     = "gemini-cli-repo"
+}
+
+variable "container_image" {
+  description = "The container image to deploy. Defaults to a public placeholder so Terraform can apply successfully before the real image is built/pushed."
+  type        = string
+  default     = "us-docker.pkg.dev/cloudrun/container/hello"
+}
+
 variable "use_iap" {
   description = "Whether to enable Identity-Aware Proxy (IAP) for the Cloud Run service"
   type        = bool

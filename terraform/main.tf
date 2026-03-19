@@ -54,7 +54,7 @@ resource "google_project_service" "iap" {
 # 2. Artifact Registry for the Docker image
 resource "google_artifact_registry_repository" "repo" {
   location      = var.region
-  repository_id = "gemini-cli-repo"
+  repository_id = var.repository_name
   description   = "Docker repository for Gemini CLI Web Terminal"
   format        = "DOCKER"
 
@@ -104,7 +104,7 @@ resource "google_cloud_run_v2_service" "web_terminal" {
     session_affinity = true
 
     containers {
-      image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.repo.name}/gemini-cli-web:latest"
+      image = var.container_image
       
       env {
         name  = "WORKSPACE_DIR"
@@ -129,6 +129,12 @@ resource "google_cloud_run_v2_service" "web_terminal" {
   traffic {
     type    = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
     percent = 100
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].containers[0].image,
+    ]
   }
 
   depends_on = [

@@ -19,13 +19,16 @@ set -e
 PROJECT_ID=$(gcloud config get-value project)
 REGION=${REGION:-us-central1}
 SERVICE_NAME=${SERVICE_NAME:-gemini-cli-web}
+REPOSITORY_NAME=${REPOSITORY_NAME:-gemini-cli-repo}
 BUCKET_NAME=${BUCKET_NAME:-${PROJECT_ID}-gemini-workspace}
-IMAGE_TAG="gcr.io/${PROJECT_ID}/${SERVICE_NAME}:latest"
+IMAGE_TAG="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY_NAME}/${SERVICE_NAME}:latest"
 
 echo "Using Project ID: ${PROJECT_ID}"
 echo "Region: ${REGION}"
 echo "Service Name: ${SERVICE_NAME}"
+echo "Repository Name: ${REPOSITORY_NAME}"
 echo "Bucket Name: ${BUCKET_NAME}"
+echo "Image Tag: ${IMAGE_TAG}"
 
 # 1. Create GCS bucket if it doesn't exist
 if ! gsutil ls -b "gs://${BUCKET_NAME}" >/dev/null 2>&1; then
@@ -40,12 +43,13 @@ echo "Building and pushing Docker image ${IMAGE_TAG}..."
 gcloud builds submit --tag "${IMAGE_TAG}" --file Dockerfile.web-terminal .
 
 # 3. Deploy to Cloud Run
+# Note: This will update the image on the service. If the service was created
+# by Terraform with lifecycle ignore_changes, Terraform will not revert it.
 echo "Deploying to Cloud Run..."
 gcloud run deploy "${SERVICE_NAME}" \
   --image "${IMAGE_TAG}" \
   --region "${REGION}" \
   --execution-environment gen2 \
-  --allow-unauthenticated \
   --update-env-vars="WORKSPACE_DIR=/mnt/gcs-workspace" \
   --add-volume="name=gcs-workspace,type=cloud-storage,bucket=${BUCKET_NAME}" \
   --add-volume-mount="volume=gcs-workspace,mount-path=/mnt/gcs-workspace" \
