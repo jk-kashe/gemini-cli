@@ -103,6 +103,23 @@ const cliConfig = {
   metafile: true,
 };
 
+const webTerminalConfig = {
+  ...baseConfig,
+  banner: {
+    js: `const require = (await import('node:module')).createRequire(import.meta.url); const __chunk_filename = (await import('node:url')).fileURLToPath(import.meta.url); const __chunk_dirname = (await import('node:path')).dirname(__chunk_filename);`,
+  },
+  entryPoints: { 'web-terminal': 'packages/web-terminal/src/server.ts' },
+  outdir: 'bundle',
+  splitting: true,
+  define: {
+    __filename: '__chunk_filename',
+    __dirname: '__chunk_dirname',
+    'process.env.CLI_VERSION': JSON.stringify(pkg.version),
+  },
+  plugins: createWasmPlugins(),
+  alias: commonAliases,
+};
+
 const a2aServerConfig = {
   ...baseConfig,
   banner: {
@@ -125,11 +142,16 @@ Promise.allSettled([
       writeFileSync('./bundle/esbuild.json', JSON.stringify(metafile, null, 2));
     }
   }),
+  esbuild.build(webTerminalConfig),
   esbuild.build(a2aServerConfig),
 ]).then((results) => {
-  const [cliResult, a2aResult] = results;
+  const [cliResult, webTerminalResult, a2aResult] = results;
   if (cliResult.status === 'rejected') {
     console.error('gemini.js build failed:', cliResult.reason);
+    process.exit(1);
+  }
+  if (webTerminalResult.status === 'rejected') {
+    console.error('web-terminal build failed:', webTerminalResult.reason);
     process.exit(1);
   }
   // error in a2a-server bundling will not stop gemini.js bundling process

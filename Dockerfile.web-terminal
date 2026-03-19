@@ -11,36 +11,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy the entire source code first. 
-# This eliminates "file not found" errors for lifecycle scripts because they are now present.
-# The .dockerignore file ensures we don't copy local node_modules or large irrelevant folders.
+# Copy the entire source code
 COPY . .
 
 # Force public registry for @google scope in case a local .npmrc was copied
 RUN npm config set @google:registry https://registry.npmjs.org/
 
-# Increase Node.js heap limit for TypeScript compilation
-ENV NODE_OPTIONS="--max-old-space-size=6144"
+# Increase Node.js heap limit for bundling
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
-# Install ONLY the necessary workspace and its dependencies. 
-# This avoids installing the VS Code extension or other heavy packages entirely.
-RUN npm install --workspace=@google/gemini-cli-web-terminal --include-workspace-root --no-package-lock --registry=https://registry.npmjs.org/ --ignore-scripts
+# Install dependencies (ignoring scripts initially to avoid husky/prepare)
+RUN npm install --no-package-lock --registry=https://registry.npmjs.org/ --ignore-scripts
 
 # Rebuild native dependencies manually since we ignored scripts
 RUN npm rebuild @lydell/node-pty
 
-# Build the required packages directly using tsc to save memory
-RUN cd packages/core && npx tsc -p tsconfig.json
-RUN cd packages/cli && npx tsc -p tsconfig.json
-RUN cd packages/web-terminal && npx tsc -p tsconfig.json
+# Bundle everything using esbuild (this generates bundle/gemini.js and bundle/web-terminal.js)
+# This is MUCH faster and uses FAR less memory than tsc.
+RUN npm run bundle
+
+# Copy web-terminal public assets into the bundle folder for the final image
+RUN cp -r packages/web-terminal/public bundle/public
 
 # Final stage
 FROM node:20-bookworm-slim
 
 # Install runtime dependencies
-# - git: used by gemini-cli tools
-# - gcsfuse: for mounting Google Cloud Storage
-# - tini: for proper signal handling
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
@@ -58,8 +54,10 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.
 
 WORKDIR /app
 
-# Copy built artifacts and node_modules from builder
-COPY --from=builder /app /app
+# Copy only the bundle and necessary node_modules (for native pty)
+COPY --from=builder /app/bundle /app/bundle
+COPY --from=builder /app/node_modules /app/node_modules
+COPY --from=builder /app/package.json /app/package.json
 
 # Create mount point for GCS FUSE
 RUN mkdir -p /mnt/gcs-workspace
@@ -75,5 +73,6 @@ EXPOSE 8080
 # Use tini to manage the process
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
-# Run the web terminal server
-CMD ["npm", "start", "-w", "@google/gemini-cli-web-terminal"]
+# Run the bundled web terminal server
+# We use node directly on the bundled file.
+CMD ["node", "bundle/web-terminal.js"]

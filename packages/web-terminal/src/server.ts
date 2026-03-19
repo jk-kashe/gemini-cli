@@ -18,8 +18,8 @@ const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
 const PORT = process.env['PORT'] || 8080;
-const PUBLIC_DIR = path.join(__dirname, '../../public');
-const CLI_PATH = path.join(__dirname, '../../../cli/dist/index.js');
+const PUBLIC_DIR = path.join(__dirname, './public');
+const CLI_PATH = path.join(__dirname, './gemini.js');
 const WORKSPACE_DIR = process.env['WORKSPACE_DIR'] || process.cwd();
 
 app.use(express.static(PUBLIC_DIR));
