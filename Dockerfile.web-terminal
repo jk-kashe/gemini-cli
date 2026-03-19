@@ -11,28 +11,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy package files for dependency installation
-COPY package*.json ./
-COPY packages/cli/package.json ./packages/cli/
-COPY packages/core/package.json ./packages/core/
-COPY packages/web-terminal/package.json ./packages/web-terminal/
-COPY packages/devtools/package.json ./packages/devtools/
-COPY packages/sdk/package.json ./packages/sdk/
-COPY packages/test-utils/package.json ./packages/test-utils/
-COPY packages/a2a-server/package.json ./packages/a2a-server/
-COPY packages/vscode-ide-companion/package.json ./packages/vscode-ide-companion/
-
-# Install dependencies without running lifecycle scripts
-RUN npm install --no-package-lock --registry=https://registry.npmjs.org/ --ignore-scripts
-
-# Copy source code
+# Copy the entire source code first. 
+# This eliminates "file not found" errors for lifecycle scripts because they are now present.
+# The .dockerignore file ensures we don't copy local node_modules or large irrelevant folders.
 COPY . .
 
-# Rebuild native dependencies (since we used --ignore-scripts earlier)
-RUN npm rebuild
+# Force public registry for @google scope in case a local .npmrc was copied
+RUN npm config set @google:registry https://registry.npmjs.org/
 
-# Build everything
-RUN npm run build:all
+# Install ONLY the necessary workspace and its dependencies. 
+# This avoids installing the VS Code extension or other heavy packages entirely.
+RUN npm install --workspace=@google/gemini-cli-web-terminal --include-workspace-root --no-package-lock --registry=https://registry.npmjs.org/
+
+# Build the required packages
+RUN npm run build --workspace=@google/gemini-cli-core
+RUN npm run build --workspace=@google/gemini-cli-web-terminal
 
 # Final stage
 FROM node:20-bookworm-slim
