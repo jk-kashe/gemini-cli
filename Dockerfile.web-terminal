@@ -1,0 +1,76 @@
+# Use Node.js 20 base image
+FROM node:20-bookworm-slim as builder
+
+# Install build dependencies for native modules (node-pty)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy package files for dependency installation
+COPY package*.json ./
+COPY packages/cli/package.json ./packages/cli/
+COPY packages/core/package.json ./packages/core/
+COPY packages/web-terminal/package.json ./packages/web-terminal/
+COPY packages/devtools/package.json ./packages/devtools/
+COPY packages/sdk/package.json ./packages/sdk/
+COPY packages/test-utils/package.json ./packages/test-utils/
+COPY packages/a2a-server/package.json ./packages/a2a-server/
+COPY packages/vscode-ide-companion/package.json ./packages/vscode-ide-companion/
+
+# Install dependencies
+RUN npm install
+
+# Copy source code
+COPY . .
+
+# Build everything
+RUN npm run build:all
+
+# Final stage
+FROM node:20-bookworm-slim
+
+# Install runtime dependencies
+# - git: used by gemini-cli tools
+# - gcsfuse: for mounting Google Cloud Storage
+# - tini: for proper signal handling
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    ca-certificates \
+    curl \
+    gnupg \
+    tini \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install GCS FUSE
+RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt gcsfuse-bookworm main" | tee /etc/apt/sources.list.d/gcsfuse.list \
+    && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg \
+    && apt-get update \
+    && apt-get install -y gcsfuse \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy built artifacts and node_modules from builder
+COPY --from=builder /app /app
+
+# Create mount point for GCS FUSE
+RUN mkdir -p /mnt/gcs-workspace
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=8080
+ENV WORKSPACE_DIR=/mnt/gcs-workspace
+
+# Expose the port
+EXPOSE 8080
+
+# Use tini to manage the process
+ENTRYPOINT ["/usr/bin/tini", "--"]
+
+# Run the web terminal server
+CMD ["npm", "start", "-w", "@google/gemini-cli-web-terminal"]

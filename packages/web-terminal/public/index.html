@@ -1,0 +1,144 @@
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Gemini CLI Web Terminal</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm/css/xterm.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit/lib/addon-fit.js"></script>
+  <style>
+    body {
+      margin: 0;
+      background: #1e1e1e;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    #terminal-container {
+      flex: 1;
+      overflow: hidden;
+      padding: 10px;
+    }
+    #header {
+      background: #333;
+      color: #fff;
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #444;
+    }
+    #status {
+      font-size: 0.9em;
+    }
+    .connected { color: #4caf50; }
+    .disconnected { color: #f44336; }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <span>Gemini CLI Web Terminal</span>
+    <div id="status">Connecting...</div>
+  </div>
+  <div id="terminal-container">
+    <div id="terminal"></div>
+  </div>
+  <script>
+    const term = new Terminal({
+      theme: {
+        background: '#1e1e1e',
+        foreground: '#d4d4d4',
+        cursor: '#aeafad',
+        selection: '#264f78',
+        black: '#000000',
+        red: '#cd3131',
+        green: '#0dbc79',
+        yellow: '#e5e510',
+        blue: '#2472c8',
+        magenta: '#bc3fbc',
+        cyan: '#11a8cd',
+        white: '#e5e5e5',
+        brightBlack: '#666666',
+        brightRed: '#f14c4c',
+        brightGreen: '#23d18b',
+        brightYellow: '#f5f543',
+        brightBlue: '#3b8eea',
+        brightMagenta: '#d670d6',
+        brightCyan: '#29b8db',
+        brightWhite: '#e5e5e5'
+      },
+      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      fontSize: 14,
+      cursorBlink: true
+    });
+
+    const fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(document.getElementById('terminal'));
+    fitAddon.fit();
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}`);
+    const statusEl = document.getElementById('status');
+
+    ws.onopen = () => {
+      statusEl.innerText = 'Connected';
+      statusEl.className = 'connected';
+      
+      // Send initial resize
+      const dims = { cols: term.cols, rows: term.rows };
+      // Note: Backend server doesn't handle resize messages yet in this simple version
+      // but it could be added.
+    };
+
+    ws.onmessage = (e) => {
+      // Handle both binary and text data
+      if (e.data instanceof Blob) {
+        const reader = new FileReader();
+        reader.onload = () => term.write(new Uint8Array(reader.result));
+        reader.readAsArrayBuffer(e.data);
+      } else {
+        term.write(e.data);
+      }
+    };
+
+    ws.onclose = () => {
+      statusEl.innerText = 'Disconnected';
+      statusEl.className = 'disconnected';
+      term.write('\r\n\x1b[31mConnection closed.\x1b[0m\r\n');
+    };
+
+    ws.onerror = (e) => {
+      console.error('WebSocket error:', e);
+      statusEl.innerText = 'Error';
+      statusEl.className = 'disconnected';
+    };
+
+    term.onData(data => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(data);
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      fitAddon.fit();
+    });
+  </script>
+</body>
+</html>
