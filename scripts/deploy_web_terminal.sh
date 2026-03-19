@@ -15,6 +15,10 @@
 
 set -e
 
+# Ensure we are in the project root directory
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "${DIR}/.."
+
 # Configuration
 PROJECT_ID=$(gcloud config get-value project)
 REGION=${REGION:-us-central1}
