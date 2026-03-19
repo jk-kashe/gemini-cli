@@ -69,6 +69,31 @@ If you prefer to deploy manually, follow these steps to set up the environment.
       --session-affinity
     ```
 
+### Using Terraform
+
+The project also provides an MVP Terraform configuration in the `terraform/`
+directory to manage the required infrastructure.
+
+1.  Navigate to the `terraform/` directory:
+    ```bash
+    cd terraform
+    ```
+2.  Initialize Terraform:
+    ```bash
+    terraform init
+    ```
+3.  Create a `terraform.tfvars` file based on `terraform.tfvars.example` and
+    provide your `project_id`.
+4.  Apply the configuration:
+    ```bash
+    terraform apply
+    ```
+
+> **Note:** The Terraform configuration includes the Cloud Run service resource.
+> Since this depends on the Docker image existing in the repository, you should
+> push your first image using `gcloud builds submit` before applying the full
+> Terraform configuration.
+
 ## Usage
 
 After deployment, you can access the Gemini CLI through your browser.
