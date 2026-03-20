@@ -271,7 +271,7 @@ async function adoptAction(
   context: CommandContext,
   args: string,
 ): Promise<SlashCommandActionReturn | void> {
-  const { config } = context.services;
+  const config = context.services.agentContext?.config;
   if (!config) {
     return {
       type: 'message',
@@ -311,7 +311,7 @@ async function adoptAction(
 async function resetAction(
   context: CommandContext,
 ): Promise<SlashCommandActionReturn | void> {
-  const { config } = context.services;
+  const config = context.services.agentContext?.config;
   if (!config) {
     return {
       type: 'message',
