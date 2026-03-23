@@ -647,10 +647,8 @@ export async function main() {
                 resumedSessionData = {
                   conversation: result.sessionData,
                   filePath: result.sessionPath,
-                    };
-                config.setSessionId(
-                  resumedSessionData.conversation.sessionId,
-                );
+                };
+                config.setSessionId(resumedSessionData.conversation.sessionId);
                 resolvedGlobally = true;
                 coreEvents.emitFeedback(
                   'info',
