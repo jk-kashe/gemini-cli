@@ -972,6 +972,7 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
         undefined,
         undefined,
         'subagent',
+        this.definition.name,
       );
     } catch (e: unknown) {
       await reportError(

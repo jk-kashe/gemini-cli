@@ -253,6 +253,9 @@ describe('Gemini Client (client.ts)', () => {
       getContinueOnFailedApiCall: vi.fn(),
       getProjectRoot: vi.fn().mockReturnValue('/test/project/root'),
       getIncludeDirectoryTree: vi.fn().mockReturnValue(true),
+      getAgentRegistry: vi.fn(),
+      setActivePersona: vi.fn(),
+      getActivePersona: vi.fn().mockReturnValue(null),
       storage: {
         getProjectTempDir: vi.fn().mockReturnValue('/test/temp'),
       },
@@ -416,6 +419,84 @@ describe('Gemini Client (client.ts)', () => {
       // The subsequent messages should be the extra history
       expect(history[1]).toEqual(extraHistory[0]);
       expect(history[2]).toEqual(extraHistory[1]);
+    });
+
+    it('should resolve and set active persona from resumed session data', async () => {
+      const resumedSessionData = {
+        conversation: {
+          agentId: 'special-agent',
+          messages: [],
+        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
+      const mockAgentDefinition = { name: 'special-agent' };
+      const mockRegistry = {
+        getDiscoveredDefinition: vi.fn().mockReturnValue(mockAgentDefinition),
+      };
+      vi.mocked(mockConfig.getAgentRegistry).mockReturnValue(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockRegistry as any,
+      );
+      vi.mocked(mockConfig.getActivePersona).mockReturnValue(null);
+
+      await client.startChat([], resumedSessionData);
+
+      expect(mockRegistry.getDiscoveredDefinition).toHaveBeenCalledWith(
+        'special-agent',
+      );
+      expect(mockConfig.setActivePersona).toHaveBeenCalledWith(
+        mockAgentDefinition,
+      );
+    });
+
+    it('should emit a warning if resumed agent is not found', async () => {
+      const resumedSessionData = {
+        conversation: {
+          agentId: 'missing-agent',
+          messages: [],
+        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
+      const mockRegistry = {
+        getDiscoveredDefinition: vi.fn().mockReturnValue(undefined),
+      };
+      vi.mocked(mockConfig.getAgentRegistry).mockReturnValue(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockRegistry as any,
+      );
+      vi.mocked(mockConfig.getActivePersona).mockReturnValue(null);
+
+      const feedbackSpy = vi.spyOn(coreEvents, 'emitFeedback');
+
+      await client.startChat([], resumedSessionData);
+
+      expect(feedbackSpy).toHaveBeenCalledWith(
+        'warning',
+        expect.stringContaining(
+          "Agent 'missing-agent' found in session history is no longer available",
+        ),
+      );
+      expect(mockConfig.setActivePersona).not.toHaveBeenCalled();
+    });
+
+    it('should not override active persona if already set (e.g. via CLI flag)', async () => {
+      const resumedSessionData = {
+        conversation: {
+          agentId: 'session-agent',
+          messages: [],
+        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
+      // Already has a persona (e.g. from --agent flag)
+      vi.mocked(mockConfig.getActivePersona).mockReturnValue({
+        name: 'cli-agent',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
+
+      await client.startChat([], resumedSessionData);
+
+      expect(mockConfig.getAgentRegistry).not.toHaveBeenCalled();
+      expect(mockConfig.setActivePersona).not.toHaveBeenCalled();
     });
   });
 

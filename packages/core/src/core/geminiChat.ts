@@ -261,10 +261,11 @@ export class GeminiChat {
     resumedSessionData?: ResumedSessionData,
     private readonly onModelChanged?: (modelId: string) => Promise<Tool[]>,
     kind: 'main' | 'subagent' = 'main',
+    agentId?: string,
   ) {
     validateHistory(history);
     this.chatRecordingService = new ChatRecordingService(context);
-    this.chatRecordingService.initialize(resumedSessionData, kind);
+    this.chatRecordingService.initialize(resumedSessionData, kind, agentId);
     this.lastPromptTokenCount = estimateTokenCountSync(
       this.history.flatMap((c) => c.parts || []),
     );

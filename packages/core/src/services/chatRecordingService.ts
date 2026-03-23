@@ -102,6 +102,8 @@ export interface ConversationRecord {
   summary?: string;
   /** Workspace directories added during the session via /dir add */
   directories?: string[];
+  /** The identifier of the agent/persona active in this session */
+  agentId?: string;
   /** The kind of conversation (main agent or subagent) */
   kind?: 'main' | 'subagent';
 }
@@ -131,6 +133,7 @@ export class ChatRecordingService {
   private cachedConversation: ConversationRecord | null = null;
   private sessionId: string;
   private projectHash: string;
+  private agentId?: string;
   private kind?: 'main' | 'subagent';
   private queuedThoughts: Array<ThoughtSummary & { timestamp: string }> = [];
   private queuedTokens: TokensSummary | null = null;
@@ -148,22 +151,35 @@ export class ChatRecordingService {
    *
    * @param resumedSessionData Data from a previous session to resume from.
    * @param kind The kind of conversation (main or subagent).
+   * @param agentId The identifier of the agent/persona active in this session.
    */
   initialize(
     resumedSessionData?: ResumedSessionData,
-    kind?: 'main' | 'subagent',
+    kind: 'main' | 'subagent' = 'main',
+    agentId?: string,
   ): void {
     try {
       this.kind = kind;
+      this.agentId =
+        agentId ??
+        (kind === 'main'
+          ? this.context.config.getActivePersona()?.name
+          : undefined);
       if (resumedSessionData) {
         // Resume from existing session
         this.conversationFile = resumedSessionData.filePath;
         this.sessionId = resumedSessionData.conversation.sessionId;
         this.kind = resumedSessionData.conversation.kind;
+        // Prefer explicit choice (passed agentId), then history, then fallback to current config
+        this.agentId =
+          agentId ?? resumedSessionData.conversation.agentId ?? this.agentId;
 
         // Update the session ID in the existing file
         this.updateConversation((conversation) => {
           conversation.sessionId = this.sessionId;
+          if (this.agentId) {
+            conversation.agentId = this.agentId;
+          }
         });
 
         // Clear any cached data to force fresh reads
@@ -194,6 +210,7 @@ export class ChatRecordingService {
           startTime: new Date().toISOString(),
           lastUpdated: new Date().toISOString(),
           messages: [],
+          agentId: this.agentId,
           kind: this.kind,
         });
       }
@@ -251,6 +268,13 @@ export class ChatRecordingService {
 
     try {
       this.updateConversation((conversation) => {
+        if (this.kind === 'main') {
+          this.agentId = this.context.config.getActivePersona()?.name;
+        }
+        if (this.agentId) {
+          conversation.agentId = this.agentId;
+        }
+
         const msg = this.newMessage(
           message.type,
           message.content,

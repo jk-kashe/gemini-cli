@@ -369,6 +369,20 @@ export class GeminiClient {
 
     const history = await getInitialChatHistory(this.config, extraHistory);
 
+    const resumedAgentId = resumedSessionData?.conversation.agentId;
+    if (resumedAgentId && !this.config.getActivePersona()) {
+      const registry = this.config.getAgentRegistry();
+      const definition = registry.getDiscoveredDefinition(resumedAgentId);
+      if (definition) {
+        this.config.setActivePersona(definition);
+      } else {
+        coreEvents.emitFeedback(
+          'warning',
+          `Agent '${resumedAgentId}' found in session history is no longer available. Falling back to the default agent.`,
+        );
+      }
+    }
+
     try {
       const systemMemory = this.config.getSystemInstructionMemory();
       const systemInstruction = getCoreSystemPrompt(this.config, systemMemory);
@@ -385,15 +399,17 @@ export class GeminiClient {
             toolRegistry.getFunctionDeclarations(modelId);
           return [{ functionDeclarations: toolDeclarations }];
         },
+        'main',
+        this.config.getActivePersona()?.name,
       );
-    } catch (error) {
+    } catch (e: unknown) {
       await reportError(
-        error,
+        e,
         'Error initializing Gemini chat session.',
         history,
         'startChat',
       );
-      throw new Error(`Failed to initialize chat: ${getErrorMessage(error)}`);
+      throw new Error(`Failed to initialize chat: ${getErrorMessage(e)}`);
     }
   }
 
