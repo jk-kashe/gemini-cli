@@ -52,6 +52,7 @@ describe('ChatRecordingService', () => {
       promptId: 'test-session-id',
       getSessionId: vi.fn().mockReturnValue('test-session-id'),
       getProjectRoot: vi.fn().mockReturnValue('/test/project/root'),
+      getActivePersona: vi.fn().mockReturnValue({ name: 'test-agent' }),
       storage: {
         getProjectTempDir: vi.fn().mockReturnValue(testTempDir),
       },
@@ -106,6 +107,104 @@ describe('ChatRecordingService', () => {
         fs.readFileSync(sessionFile, 'utf8'),
       ) as ConversationRecord;
       expect(conversation.kind).toBe('subagent');
+    });
+
+    it('should include the agentId when specified', () => {
+      vi.mocked(mockConfig.getActivePersona).mockReturnValue({
+        name: 'my-custom-agent',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
+      chatRecordingService.initialize(undefined, 'main', 'my-custom-agent');
+      chatRecordingService.recordMessage({
+        type: 'user',
+        content: 'ping',
+        model: 'm',
+      });
+
+      const sessionFile = chatRecordingService.getConversationFilePath()!;
+      const conversation = JSON.parse(
+        fs.readFileSync(sessionFile, 'utf8'),
+      ) as ConversationRecord;
+      expect(conversation.agentId).toBe('my-custom-agent');
+    });
+
+    it('should include the agentId from config for main agent if not specified', () => {
+      chatRecordingService.initialize(undefined, 'main');
+      chatRecordingService.recordMessage({
+        type: 'user',
+        content: 'ping',
+        model: 'm',
+      });
+
+      const sessionFile = chatRecordingService.getConversationFilePath()!;
+      const conversation = JSON.parse(
+        fs.readFileSync(sessionFile, 'utf8'),
+      ) as ConversationRecord;
+      expect(conversation.agentId).toBe('test-agent');
+    });
+
+    it('should preserve agentId from resumed session even if it differs from current config', () => {
+      const chatsDir = path.join(testTempDir, 'chats');
+      fs.mkdirSync(chatsDir, { recursive: true });
+      const sessionFile = path.join(chatsDir, 'session.json');
+      const initialData: Partial<ConversationRecord> = {
+        sessionId: 'old-session-id',
+        projectHash: 'test-project-hash',
+        agentId: 'the-old-agent',
+        messages: [],
+      };
+      fs.writeFileSync(sessionFile, JSON.stringify(initialData));
+
+      // Current config has 'test-agent' (set in beforeEach), but session has 'the-old-agent'
+      chatRecordingService.initialize({
+        conversation: initialData as ConversationRecord,
+        filePath: sessionFile,
+      });
+
+      chatRecordingService.recordMessage({
+        type: 'user',
+        content: 'ping',
+        model: 'm',
+      });
+
+      const conversation = JSON.parse(
+        fs.readFileSync(sessionFile, 'utf8'),
+      ) as ConversationRecord;
+      expect(conversation.agentId).toBe('the-old-agent');
+    });
+
+    it('should prefer explicit agentId over session history if provided', () => {
+      const chatsDir = path.join(testTempDir, 'chats');
+      fs.mkdirSync(chatsDir, { recursive: true });
+      const sessionFile = path.join(chatsDir, 'session.json');
+      const initialData: Partial<ConversationRecord> = {
+        sessionId: 'old-session-id',
+        projectHash: 'test-project-hash',
+        agentId: 'the-old-agent',
+        messages: [],
+      };
+      fs.writeFileSync(sessionFile, JSON.stringify(initialData));
+
+      // Explicitly requested 'new-agent'
+      chatRecordingService.initialize(
+        {
+          conversation: initialData as ConversationRecord,
+          filePath: sessionFile,
+        },
+        'main',
+        'new-agent',
+      );
+
+      chatRecordingService.recordMessage({
+        type: 'user',
+        content: 'ping',
+        model: 'm',
+      });
+
+      const conversation = JSON.parse(
+        fs.readFileSync(sessionFile, 'utf8'),
+      ) as ConversationRecord;
+      expect(conversation.agentId).toBe('new-agent');
     });
 
     it('should resume from an existing session if provided', () => {

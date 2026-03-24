@@ -267,6 +267,77 @@ async function configAction(
   };
 }
 
+async function adoptAction(
+  context: CommandContext,
+  args: string,
+): Promise<SlashCommandActionReturn | void> {
+  const config = context.services.agentContext?.config;
+  if (!config) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: 'Config not loaded.',
+    };
+  }
+
+  const agentName = args.trim();
+  if (!agentName) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: 'Usage: /agents adopt <agent-name>',
+    };
+  }
+
+  const agentRegistry = config.getAgentRegistry();
+  const definition = agentRegistry?.getDiscoveredDefinition(agentName);
+  if (!definition) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: `Agent '${agentName}' not found.`,
+    };
+  }
+
+  if (definition.kind !== 'local') {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: `Only local agents can be adopted as personas. '${agentName}' is a remote agent.`,
+    };
+  }
+
+  config.setActivePersona(definition);
+
+  return {
+    type: 'message',
+    messageType: 'info',
+    content: `Main agent has adopted the persona: **${definition.displayName || agentName}**`,
+  };
+}
+
+async function resetAction(
+  context: CommandContext,
+  _args: string,
+): Promise<SlashCommandActionReturn | void> {
+  const config = context.services.agentContext?.config;
+  if (!config) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: 'Config not loaded.',
+    };
+  }
+
+  config.setActivePersona(null);
+
+  return {
+    type: 'message',
+    messageType: 'info',
+    content: 'Main agent persona has been reset to default.',
+  };
+}
+
 function completeAgentsToEnable(context: CommandContext, partialArg: string) {
   const config = context.services.agentContext?.config;
   const { settings } = context.services;
@@ -298,6 +369,19 @@ function completeAllAgents(context: CommandContext, partialArg: string) {
   return allAgents.filter((name: string) => name.startsWith(partialArg));
 }
 
+function completeLocalAgents(context: CommandContext, partialArg: string) {
+  const config = context.services.agentContext?.config;
+  if (!config) return [];
+
+  const agentRegistry = config.getAgentRegistry();
+  const localAgents =
+    agentRegistry
+      ?.getAllDefinitions()
+      .filter((d) => d.kind === 'local')
+      .map((d) => d.name) ?? [];
+  return localAgents.filter((name: string) => name.startsWith(partialArg));
+}
+
 const enableCommand: SlashCommand = {
   name: 'enable',
   description: 'Enable a disabled agent',
@@ -323,6 +407,23 @@ const configCommand: SlashCommand = {
   autoExecute: false,
   action: configAction,
   completion: completeAllAgents,
+};
+
+const adoptCommand: SlashCommand = {
+  name: 'adopt',
+  description: 'Adopts the persona of a specific agent for the main session',
+  kind: CommandKind.BUILT_IN,
+  autoExecute: false,
+  action: adoptAction,
+  completion: completeLocalAgents,
+};
+
+const resetCommand: SlashCommand = {
+  name: 'reset',
+  description: 'Resets the main agent persona to default',
+  kind: CommandKind.BUILT_IN,
+  autoExecute: true,
+  action: resetAction,
 };
 
 const agentsReloadCommand: SlashCommand = {
@@ -366,6 +467,8 @@ export const agentsCommand: SlashCommand = {
     enableCommand,
     disableCommand,
     configCommand,
+    adoptCommand,
+    resetCommand,
   ],
   action: async (context: CommandContext, args) =>
     // Default to list if no subcommand is provided

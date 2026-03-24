@@ -99,6 +99,7 @@ describe('Core System Prompt (prompts.ts)', () => {
       isTopicUpdateNarrationEnabled: vi.fn().mockReturnValue(false),
       isMemoryManagerEnabled: vi.fn().mockReturnValue(false),
       isAgentsEnabled: vi.fn().mockReturnValue(false),
+      getActivePersona: vi.fn().mockReturnValue(null),
       getPreviewFeatures: vi.fn().mockReturnValue(true),
       getModel: vi.fn().mockReturnValue(DEFAULT_GEMINI_MODEL_AUTO),
       getActiveModel: vi.fn().mockReturnValue(DEFAULT_GEMINI_MODEL),

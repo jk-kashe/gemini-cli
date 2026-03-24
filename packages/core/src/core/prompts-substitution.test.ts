@@ -49,6 +49,7 @@ describe('Core System Prompt Substitution', () => {
       isInteractive: vi.fn().mockReturnValue(true),
       isInteractiveShellEnabled: vi.fn().mockReturnValue(true),
       isAgentsEnabled: vi.fn().mockReturnValue(false),
+      getActivePersona: vi.fn().mockReturnValue(null),
       getModel: vi.fn().mockReturnValue('auto'),
       getActiveModel: vi.fn().mockReturnValue('gemini-1.5-pro'),
       getAgentRegistry: vi.fn().mockReturnValue({

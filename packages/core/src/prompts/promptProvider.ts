@@ -70,6 +70,62 @@ export class PromptProvider {
     const activeSnippets = isModernModel ? snippets : legacySnippets;
     const contextFilenames = getAllGeminiMdFilenames();
 
+    const activePersona = context.config.getActivePersona?.();
+    if (activePersona && activePersona.kind === 'local') {
+      const personaPrompt = activePersona.promptConfig.systemPrompt || '';
+      const options: snippets.SystemPromptOptions = {
+        preamble: this.withSection('preamble', () => ({
+          interactive: interactiveMode,
+        })),
+        coreMandates: this.withSection('coreMandates', () => ({
+          interactive: interactiveMode,
+          hasSkills: skills.length > 0,
+          hasHierarchicalMemory: !!userMemory,
+          contextFilenames,
+          topicUpdateNarration: context.config.isTopicUpdateNarrationEnabled(),
+        })),
+        operationalGuidelines: this.withSection(
+          'operationalGuidelines',
+          () => ({
+            interactive: interactiveMode,
+            enableShellEfficiency:
+              context.config.getEnableShellOutputEfficiency(),
+            interactiveShellEnabled: context.config.isInteractiveShellEnabled(),
+            topicUpdateNarration:
+              context.config.isTopicUpdateNarrationEnabled(),
+          }),
+        ),
+        sandbox: this.withSection('sandbox', () => getSandboxMode()),
+        gitRepo: this.withSection(
+          'git',
+          () => ({ interactive: interactiveMode }),
+          isGitRepository(process.cwd()) ? true : false,
+        ),
+      } as snippets.SystemPromptOptions;
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+      const getCoreSystemPrompt = activeSnippets.getCoreSystemPrompt as (
+        options: snippets.SystemPromptOptions,
+      ) => string;
+
+      // We compose the persona prompt with core mandates and project context.
+      const basePrompt = `
+${personaPrompt.trim()}
+
+---
+
+${getCoreSystemPrompt(options)}
+`.trim();
+
+      const finalPrompt = activeSnippets.renderFinalShell(
+        basePrompt,
+        userMemory,
+        contextFilenames,
+      );
+
+      return finalPrompt.replace(/\n{3,}/g, '\n\n');
+    }
+
     // --- Context Gathering ---
     let planModeToolsList = '';
     if (isPlanMode) {

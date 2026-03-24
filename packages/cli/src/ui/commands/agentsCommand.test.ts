@@ -466,4 +466,119 @@ describe('agentsCommand', () => {
       expect(completions).toEqual(['agent1', 'agent2']);
     });
   });
+
+  describe('adopt sub-command', () => {
+    it('should adopt a local agent successfully', async () => {
+      const mockDefinition = {
+        name: 'test-agent',
+        displayName: 'Test Agent',
+        description: 'test desc',
+        kind: 'local',
+      };
+      const setActivePersona = vi.fn();
+      mockConfig.getAgentRegistry = vi.fn().mockReturnValue({
+        getDiscoveredDefinition: vi.fn().mockReturnValue(mockDefinition),
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockConfig as any).setActivePersona = setActivePersona;
+
+      const adoptCommand = agentsCommand.subCommands?.find(
+        (cmd) => cmd.name === 'adopt',
+      );
+      expect(adoptCommand).toBeDefined();
+
+      const result = await adoptCommand!.action!(mockContext, 'test-agent');
+
+      expect(setActivePersona).toHaveBeenCalledWith(mockDefinition);
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'info',
+        content: 'Main agent has adopted the persona: **Test Agent**',
+      });
+    });
+
+    it('should show error when trying to adopt a remote agent', async () => {
+      const mockDefinition = {
+        name: 'remote-agent',
+        kind: 'remote',
+      };
+      const setActivePersona = vi.fn();
+      mockConfig.getAgentRegistry = vi.fn().mockReturnValue({
+        getDiscoveredDefinition: vi.fn().mockReturnValue(mockDefinition),
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockConfig as any).setActivePersona = setActivePersona;
+
+      const adoptCommand = agentsCommand.subCommands?.find(
+        (cmd) => cmd.name === 'adopt',
+      );
+      const result = await adoptCommand!.action!(mockContext, 'remote-agent');
+
+      expect(setActivePersona).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'error',
+        content:
+          "Only local agents can be adopted as personas. 'remote-agent' is a remote agent.",
+      });
+    });
+
+    it('should show error if agent is not found', async () => {
+      mockConfig.getAgentRegistry = vi.fn().mockReturnValue({
+        getDiscoveredDefinition: vi.fn().mockReturnValue(undefined),
+      });
+
+      const adoptCommand = agentsCommand.subCommands?.find(
+        (cmd) => cmd.name === 'adopt',
+      );
+      const result = await adoptCommand!.action!(mockContext, 'non-existent');
+
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'error',
+        content: "Agent 'non-existent' not found.",
+      });
+    });
+
+    it('should provide completions for only local agents', async () => {
+      mockConfig.getAgentRegistry = vi.fn().mockReturnValue({
+        getAllDefinitions: vi.fn().mockReturnValue([
+          { name: 'local1', kind: 'local' },
+          { name: 'local2', kind: 'local' },
+          { name: 'remote1', kind: 'remote' },
+        ]),
+      });
+
+      const adoptCommand = agentsCommand.subCommands?.find(
+        (cmd) => cmd.name === 'adopt',
+      );
+      expect(adoptCommand?.completion).toBeDefined();
+
+      const completions = await adoptCommand!.completion!(mockContext, 'local');
+      expect(completions).toEqual(['local1', 'local2']);
+      expect(completions).not.toContain('remote1');
+    });
+  });
+
+  describe('reset sub-command', () => {
+    it('should reset persona successfully', async () => {
+      const setActivePersona = vi.fn();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockConfig as any).setActivePersona = setActivePersona;
+
+      const resetCommand = agentsCommand.subCommands?.find(
+        (cmd) => cmd.name === 'reset',
+      );
+      expect(resetCommand).toBeDefined();
+
+      const result = await resetCommand!.action!(mockContext, '');
+
+      expect(setActivePersona).toHaveBeenCalledWith(null);
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'info',
+        content: 'Main agent persona has been reset to default.',
+      });
+    });
+  });
 });
