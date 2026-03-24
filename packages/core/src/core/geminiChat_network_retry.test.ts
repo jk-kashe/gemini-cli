@@ -120,6 +120,7 @@ describe('GeminiChat Network Retries', () => {
         })),
       },
       getEnableHooks: vi.fn().mockReturnValue(false),
+      getActivePersona: vi.fn().mockReturnValue(null),
       getModelAvailabilityService: vi
         .fn()
         .mockReturnValue(createAvailabilityServiceMock()),

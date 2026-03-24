@@ -84,6 +84,7 @@ describe('checkNextSpeaker', () => {
       modelConfigService: {
         getResolvedConfig: vi.fn().mockReturnValue(mockResolvedConfig),
       },
+      getActivePersona: vi.fn().mockReturnValue(null),
     } as unknown as Config;
 
     mockBaseLlmClient = new BaseLlmClient(

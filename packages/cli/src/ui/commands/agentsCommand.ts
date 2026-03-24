@@ -299,6 +299,14 @@ async function adoptAction(
     };
   }
 
+  if (definition.kind !== 'local') {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: `Only local agents can be adopted as personas. '${agentName}' is a remote agent.`,
+    };
+  }
+
   config.setActivePersona(definition);
 
   return {
@@ -310,6 +318,7 @@ async function adoptAction(
 
 async function resetAction(
   context: CommandContext,
+  _args: string,
 ): Promise<SlashCommandActionReturn | void> {
   const config = context.services.agentContext?.config;
   if (!config) {
@@ -360,6 +369,19 @@ function completeAllAgents(context: CommandContext, partialArg: string) {
   return allAgents.filter((name: string) => name.startsWith(partialArg));
 }
 
+function completeLocalAgents(context: CommandContext, partialArg: string) {
+  const config = context.services.agentContext?.config;
+  if (!config) return [];
+
+  const agentRegistry = config.getAgentRegistry();
+  const localAgents =
+    agentRegistry
+      ?.getAllDefinitions()
+      .filter((d) => d.kind === 'local')
+      .map((d) => d.name) ?? [];
+  return localAgents.filter((name: string) => name.startsWith(partialArg));
+}
+
 const enableCommand: SlashCommand = {
   name: 'enable',
   description: 'Enable a disabled agent',
@@ -393,7 +415,7 @@ const adoptCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   autoExecute: false,
   action: adoptAction,
-  completion: completeAllAgents,
+  completion: completeLocalAgents,
 };
 
 const resetCommand: SlashCommand = {

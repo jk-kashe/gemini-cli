@@ -194,6 +194,7 @@ describe('GeminiChat', () => {
       setActiveModel: vi
         .fn()
         .mockImplementation((m: string) => (currentActiveModel = m)),
+      getActivePersona: vi.fn().mockReturnValue(null),
       getModelAvailabilityService: vi
         .fn()
         .mockReturnValue(createAvailabilityServiceMock()),
